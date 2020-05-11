@@ -13,5 +13,5 @@ Final project for CSE 542 - Reinforcement Learning.
 ## Background literature
 
 - [Ellis et al. "Write, Execute, Assess: Program Synthesis with a REPL". 2019.](https://arxiv.org/abs/1906.04604)
-- [Ellis et al. "Learning to Infer Graphics Programs from Hand-Drawn Images". 2017.](Learning to Infer Graphics Programs from Hand-Drawn Images)
+- [Ellis et al. "Learning to Infer Graphics Programs from Hand-Drawn Images". 2017.](https://arxiv.org/abs/1707.09627)
 - [Lin et al. "Modeling 3D Shapes by Reinforcement Learning". 2019.](https://arxiv.org/abs/2003.12397).
