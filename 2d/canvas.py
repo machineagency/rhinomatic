@@ -1,5 +1,6 @@
 import numpy as np
 import imageio
+from random import randrange
 
 class Canvas:
     def __init__(self, height, width):
@@ -17,6 +18,9 @@ class Canvas:
         struct = (prim_name, args)
         self.primitives.append(struct)
         return struct
+
+    def clear_primitives(self):
+        self.primitives = []
 
     def write_spec(self, filename='spec'):
         spec_file = open(f'{filename}.txt', 'w+')
@@ -93,12 +97,23 @@ class Canvas:
         imageio.imwrite(f'{filename}.{FILETYPE}', self.canvas, FILETYPE)
         return filename
 
+    def make_random_drawings(self, n):
+        MAX_PRIMITIVES = 10
+        for drawing_number in range(n):
+            num_primitives = randrange(1, MAX_PRIMITIVES)
+            self.clear_primitives()
+            self.clear_canvas()
+            for primitive_number in range(num_primitives):
+                x0 = randrange(256)
+                y0 = randrange(256)
+                x1 = randrange(256)
+                y1 = randrange(256)
+                c.add_line(x0, y0, x1, y1)
+            self.render_canvas()
+            self.save_canvas(f'data/drawings/{drawing_number}')
+            self.write_spec(f'data/specs/{drawing_number}')
+
 if __name__ == '__main__':
     c = Canvas(265, 256)
-    c.add_line(0, 0, 80, 20)
-    c.add_line(50, 20, 50, 150)
-    c.add_line(20, 50, 150, 50)
-    c.render_canvas()
-    c.save_canvas()
-    c.write_spec()
+    c.make_random_drawings(10)
 
