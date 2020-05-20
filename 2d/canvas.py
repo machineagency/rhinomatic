@@ -3,11 +3,12 @@ import imageio
 
 class Canvas
     def __init__(self, height, width):
-        self.BLACK = 255
+        self.WHITE = 255
+        self.BLACK = 0
         self.height = height
         self.width = width
         self.primitives = []
-        self.canvas = np.ones((height, width)) * BLACK
+        self.canvas = np.ones((height, width)) * WHITE
 
     def add_line(x0, y0, x1, y1):
         return self._add_primitive_struct('line', [x0, y0, x1, y1])
@@ -20,13 +21,19 @@ class Canvas
     def set_pixel(self, x, y):
         self.canvas[x, y] = self.BLACK
 
+    def clear_canvas(self):
+        self.canvas = np.ones((self.height, self.width)) * WHITE
+
     def render_canvas(self):
-        # TODO: calls all the drawing functions to draw structs
-        # in self.primitives to the canvas
-        pass
+        self.clear_canvas()
+        for struct in self.primitives:
+            command_name = struct[0]
+            command_args = struct[1]
+            if command_name == 'line':
+                self.render_line(*command_args)
+        return self.canvas
 
     def render_line(x0, y0, x1, y1):
-        # TODO: bresenham
         if abs(y1 - y0) < abs(x1 - x0):
             if x0 > x1:
                 self._render_line_low(x1, y1, x0, y0)
@@ -75,4 +82,10 @@ class Canvas
     def save_canvas(self, filename='img'):
         imageio.imwrite(filename, self.canvas, 'png')
         return filename
+
+if __name__ == '__main__':
+    c = Canvas()
+    c.add_line(0, 0, 2, 2)
+    c.render_canvas()
+    print(c.canvas)
 
