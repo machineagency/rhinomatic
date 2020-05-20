@@ -18,11 +18,20 @@ class Canvas:
         self.primitives.append(struct)
         return struct
 
+    def write_spec(self, filename='spec'):
+        spec_file = open(f'{filename}.txt', 'w+')
+        for struct in self.primitives:
+            command_name, command_args = struct[0], tuple(struct[1])
+            spec_file.write(f'{command_name}{command_args}\n')
+        spec_file.write('\n')
+        spec_file.close()
+
     def set_pixel(self, x, y):
         self.canvas[x, y] = self.BLACK
 
     def clear_canvas(self):
-        self.canvas = np.ones((self.height, self.width), dtype='uint8') * self.WHITE
+        self.canvas = np.ones((self.height, self.width), dtype='uint8')\
+                        * self.WHITE
 
     def render_canvas(self):
         self.clear_canvas()
@@ -91,4 +100,5 @@ if __name__ == '__main__':
     c.add_line(20, 50, 150, 50)
     c.render_canvas()
     c.save_canvas()
+    c.write_spec()
 
