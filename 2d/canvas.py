@@ -114,6 +114,6 @@ class Canvas:
             self.write_spec(f'data/specs/{drawing_number}')
 
 if __name__ == '__main__':
-    c = Canvas(265, 256)
+    c = Canvas(256, 256)
     c.make_random_drawings(10)
 
