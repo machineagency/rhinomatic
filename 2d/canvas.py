@@ -1,16 +1,16 @@
 import numpy as np
 import imageio
 
-class Canvas
+class Canvas:
     def __init__(self, height, width):
         self.WHITE = 255
         self.BLACK = 0
         self.height = height
         self.width = width
         self.primitives = []
-        self.canvas = np.ones((height, width)) * WHITE
+        self.canvas = np.ones((height, width), dtype='uint8') * self.WHITE
 
-    def add_line(x0, y0, x1, y1):
+    def add_line(self, x0, y0, x1, y1):
         return self._add_primitive_struct('line', [x0, y0, x1, y1])
 
     def _add_primitive_struct(self, prim_name, args):
@@ -22,7 +22,7 @@ class Canvas
         self.canvas[x, y] = self.BLACK
 
     def clear_canvas(self):
-        self.canvas = np.ones((self.height, self.width)) * WHITE
+        self.canvas = np.ones((self.height, self.width), dtype='uint8') * self.WHITE
 
     def render_canvas(self):
         self.clear_canvas()
@@ -33,7 +33,7 @@ class Canvas
                 self.render_line(*command_args)
         return self.canvas
 
-    def render_line(x0, y0, x1, y1):
+    def render_line(self, x0, y0, x1, y1):
         if abs(y1 - y0) < abs(x1 - x0):
             if x0 > x1:
                 self._render_line_low(x1, y1, x0, y0)
@@ -45,7 +45,7 @@ class Canvas
             else:
                 self._render_line_high(x0, y0, x1, y1)
 
-    def _render_line_low(x0, y0, x1, y1):
+    def _render_line_low(self, x0, y0, x1, y1):
         dx = x1 - x0
         dy = y1 - y0
         yi = 1
@@ -62,7 +62,7 @@ class Canvas
                 D -= 2 * dx
             D += 2 * dy
 
-    def _render_line_high(x0, y0, x1, y1):
+    def _render_line_high(self, x0, y0, x1, y1):
         dx = x1 - x0
         dy = y1 - y0
         xi = 1
@@ -80,12 +80,15 @@ class Canvas
             D += 2 * dx
 
     def save_canvas(self, filename='img'):
-        imageio.imwrite(filename, self.canvas, 'png')
+        FILETYPE = 'png'
+        imageio.imwrite(f'{filename}.{FILETYPE}', self.canvas, FILETYPE)
         return filename
 
 if __name__ == '__main__':
-    c = Canvas()
-    c.add_line(0, 0, 2, 2)
+    c = Canvas(265, 256)
+    c.add_line(0, 0, 80, 20)
+    c.add_line(50, 20, 50, 150)
+    c.add_line(20, 50, 150, 50)
     c.render_canvas()
-    print(c.canvas)
+    c.save_canvas()
 
