@@ -17,6 +17,9 @@ class Canvas:
     def add_rectangle(self, x, y, h, w):
         return self._add_primitive_struct('rectangle', [x, y, h, w])
 
+    def add_circle(self, x, y, r):
+        return self._add_primitive_struct('circle', [x, y, r])
+
     def _add_primitive_struct(self, prim_name, args):
         struct = (prim_name, args)
         self.primitives.append(struct)
@@ -50,6 +53,10 @@ class Canvas:
                 self.render_line(*command_args)
             if command_name == 'rectangle':
                 self.render_rectangle(*command_args)
+            if command_name == 'circle':
+                self.render_circle(*command_args)
+            else:
+                raise Exception('Unknown primitive encountered during render.')
         return self.canvas
 
     def render_line(self, x0, y0, x1, y1):
@@ -103,6 +110,13 @@ class Canvas:
             for x_idx in range(x, x + w):
                 self.set_pixel(x_idx, y_idx)
 
+    def render_circle(self, x, y, r):
+        for y_idx in range(y - r, y + r + 1):
+            for x_idx in range(x - r, x + r + 1):
+                dist_vect = (x_idx - x, y_idx - y)
+                if np.linalg.norm(dist_vect) <= r:
+                    self.set_pixel(x_idx, y_idx)
+
     def save_canvas(self, filename='img'):
         FILETYPE = 'png'
         imageio.imwrite(f'{filename}.{FILETYPE}', self.canvas, FILETYPE)
@@ -117,9 +131,8 @@ class Canvas:
             for primitive_number in range(num_primitives):
                 x = randrange(100)
                 y = randrange(100)
-                h = randrange(50)
-                w = randrange(50)
-                c.add_rectangle(x, y, h, w)
+                r = randrange(50)
+                c.add_circle(x, y, r)
             self.render_canvas()
             self.save_canvas(f'data/drawings/{drawing_number}')
             self.write_spec(f'data/specs/{drawing_number}')
