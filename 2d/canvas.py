@@ -14,6 +14,9 @@ class Canvas:
     def add_line(self, x0, y0, x1, y1):
         return self._add_primitive_struct('line', [x0, y0, x1, y1])
 
+    def add_rectangle(self, x, y, h, w):
+        return self._add_primitive_struct('rectangle', [x, y, h, w])
+
     def _add_primitive_struct(self, prim_name, args):
         struct = (prim_name, args)
         self.primitives.append(struct)
@@ -31,7 +34,8 @@ class Canvas:
         spec_file.close()
 
     def set_pixel(self, x, y):
-        self.canvas[x, y] = self.BLACK
+        if x >= 0 and x < self.width and y >= 0 and y < self.height:
+            self.canvas[x, y] = self.BLACK
 
     def clear_canvas(self):
         self.canvas = np.ones((self.height, self.width), dtype='uint8')\
@@ -44,6 +48,8 @@ class Canvas:
             command_args = struct[1]
             if command_name == 'line':
                 self.render_line(*command_args)
+            if command_name == 'rectangle':
+                self.render_rectangle(*command_args)
         return self.canvas
 
     def render_line(self, x0, y0, x1, y1):
@@ -92,28 +98,33 @@ class Canvas:
                 D -= 2 * dy
             D += 2 * dx
 
+    def render_rectangle(self, x, y, h, w):
+        for y_idx in range(y, y + h):
+            for x_idx in range(x, x + w):
+                self.set_pixel(x_idx, y_idx)
+
     def save_canvas(self, filename='img'):
         FILETYPE = 'png'
         imageio.imwrite(f'{filename}.{FILETYPE}', self.canvas, FILETYPE)
         return filename
 
     def make_random_drawings(self, n):
-        MAX_PRIMITIVES = 10
+        MAX_PRIMITIVES = 2
         for drawing_number in range(n):
             num_primitives = randrange(1, MAX_PRIMITIVES)
             self.clear_primitives()
             self.clear_canvas()
             for primitive_number in range(num_primitives):
-                x0 = randrange(256)
-                y0 = randrange(256)
-                x1 = randrange(256)
-                y1 = randrange(256)
-                c.add_line(x0, y0, x1, y1)
+                x = randrange(100)
+                y = randrange(100)
+                h = randrange(50)
+                w = randrange(50)
+                c.add_rectangle(x, y, h, w)
             self.render_canvas()
             self.save_canvas(f'data/drawings/{drawing_number}')
             self.write_spec(f'data/specs/{drawing_number}')
 
 if __name__ == '__main__':
     c = Canvas(256, 256)
-    c.make_random_drawings(10)
+    c.make_random_drawings(2)
 
