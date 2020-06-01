@@ -38,7 +38,7 @@ class Canvas:
 
     def set_pixel(self, x, y):
         if x >= 0 and x < self.width and y >= 0 and y < self.height:
-            self.canvas[x, y] = self.BLACK
+            self.canvas[y, x] = self.BLACK
 
     def clear_canvas(self):
         self.canvas = np.ones((self.height, self.width), dtype='uint8')\
@@ -55,8 +55,6 @@ class Canvas:
                 self.render_rectangle(*command_args)
             if command_name == 'circle':
                 self.render_circle(*command_args)
-            else:
-                raise Exception('Unknown primitive encountered during render.')
         return self.canvas
 
     def render_line(self, x0, y0, x1, y1):
@@ -137,7 +135,25 @@ class Canvas:
             self.save_canvas(f'data/drawings/{drawing_number}')
             self.write_spec(f'data/specs/{drawing_number}')
 
+    def make_easy_drawings(self, n):
+        anchor_points = [(50, 100), (150, 100)]
+        for drawing_number in range(n):
+            self.clear_primitives()
+            self.clear_canvas()
+            for pt in anchor_points:
+                dice_roll = np.random.rand()
+                if dice_roll < 0.33:
+                    c.add_rectangle(*pt, 40, 40)
+                elif dice_roll < 0.67:
+                    c.add_circle(*pt, 20)
+                else:
+                    # Don't do draw anything here
+                    pass
+            self.render_canvas()
+            self.save_canvas(f'data/drawings/{drawing_number}')
+            self.write_spec(f'data/specs/{drawing_number}')
+
 if __name__ == '__main__':
     c = Canvas(256, 256)
-    c.make_random_drawings(2)
+    c.make_easy_drawings(2000)
 
