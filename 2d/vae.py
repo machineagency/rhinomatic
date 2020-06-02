@@ -13,13 +13,13 @@ from torchvision.utils import save_image
 # changed configuration to this instead of argparse for easier interaction
 CUDA = False
 SEED = 1
-BATCH_SIZE = 32
+BATCH_SIZE = 128
 LOG_INTERVAL = 10
-EPOCHS = 16
+EPOCHS = 10
 
 # connections through the autoencoder bottleneck
 # in the pytorch VAE example, this is 20
-ZDIMS = 32
+ZDIMS = 20
 
 torch.manual_seed(SEED)
 if CUDA:
@@ -149,19 +149,19 @@ if CUDA:
 
 def load_dataset(is_test=False):
     if is_test:
-        data_path = './data'
-    else:
         data_path = './test'
+    else:
+        data_path = './data'
     train_dataset = datasets.ImageFolder(
             root=data_path,
             transform=transforms.Compose([
                 transforms.Grayscale(),
                 transforms.ToTensor()
-                ])
+            ])
     )
     train_loader = torch.utils.data.DataLoader(
             train_dataset,
-            batch_size=32,
+            batch_size=BATCH_SIZE,
             num_workers=0,
             shuffle=True
     )

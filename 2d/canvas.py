@@ -136,16 +136,27 @@ class Canvas:
             self.write_spec(f'data/specs/{drawing_number}')
 
     def make_easy_drawings(self, n):
-        anchor_points = [(50, 100), (150, 100)]
+        # anchor_points = [(20, 10), (10, 20)]
         for drawing_number in range(n):
+            if drawing_number % 1000 == 0:
+                print(drawing_number)
             self.clear_primitives()
             self.clear_canvas()
-            for pt in anchor_points:
+            # for pt in anchor_points:
+            for _ in range(3):
+                pt = (np.random.randint(0, 32), np.random.randint(0, 32))
+                h = np.random.randint(8, 16)
+                w = np.random.randint(8, 16)
+                r = np.random.randint(4, 8)
+
+                # h = 8
+                # w = 8
+                # r = 4
                 dice_roll = np.random.rand()
                 if dice_roll < 0.33:
-                    c.add_rectangle(*pt, 40, 40)
+                    c.add_rectangle(*pt, h, w)
                 elif dice_roll < 0.67:
-                    c.add_circle(*pt, 20)
+                    c.add_circle(*pt, r)
                 else:
                     # Don't do draw anything here
                     pass
@@ -154,6 +165,7 @@ class Canvas:
             self.write_spec(f'data/specs/{drawing_number}')
 
 if __name__ == '__main__':
-    c = Canvas(256, 256)
-    c.make_easy_drawings(2000)
+    batch_size = 32
+    c = Canvas(32, 32)
+    c.make_easy_drawings(1000 * batch_size)
 
