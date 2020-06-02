@@ -11,6 +11,40 @@ class Canvas:
         self.primitives = []
         self.canvas = np.ones((height, width), dtype='uint8') * self.WHITE
 
+    def peek_action(self, action):
+        """
+        Action is a primitive struct of the form:
+        (prim_name, [args])
+        """
+        orig_canvas = self.canvas.copy()
+        self._add_primitive_struct(action[0], *action[1:])
+        self.render_canvas()
+        new_canvas = self.canvas.copy()
+        self._remove_last_primitive_struct()
+        self.canvas = orig_canvas
+        return new_canvas
+
+    def get_reasonable_actions(self):
+        # TODO: not convex hull; h, w, r canned
+        actions = []
+        for prim_name in ['rectangle', 'circle']:
+            for y in range(self.height):
+                for x in range(self.width):
+                    if self.canvas[y, x] == self.BLACK:
+                        if prim_name == 'rectangle':
+                            for h in range(8, 16):
+                                for y in range(8, 16):
+                                    actions.push(('rectangle', [x, y, h, w]))
+                        if prim_name == 'circle':
+                            for r in range(4, 8):
+                                actions.push(('circle', [x, y, r]))
+        return actions
+
+    def intersection_over_union(self, spec):
+        union = np.where(self.canvas + spec > 0, 1, 0)
+        intersection = np.where(self.canvas + spec > 1, 1, 0)
+        return union / intersection
+
     def add_line(self, x0, y0, x1, y1):
         return self._add_primitive_struct('line', [x0, y0, x1, y1])
 
@@ -24,6 +58,9 @@ class Canvas:
         struct = (prim_name, args)
         self.primitives.append(struct)
         return struct
+
+    def _remove_last_primitive_struct(self):
+        self.primitives = self.primitives[:len(self.primitives) - 1]
 
     def clear_primitives(self):
         self.primitives = []
