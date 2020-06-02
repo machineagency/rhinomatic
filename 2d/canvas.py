@@ -4,6 +4,7 @@ from random import randrange
 
 class Canvas:
     def __init__(self, height, width):
+        self.MAX_PRIMITIVES = 3
         self.WHITE = 255
         self.BLACK = 0
         self.height = height
@@ -11,11 +12,20 @@ class Canvas:
         self.primitives = []
         self.canvas = np.ones((height, width), dtype='uint8') * self.WHITE
 
+    def do_action(self, action):
+        if action[0] == 'STOP':
+            return False
+        self._add_primitive_struct(action[0], *action[1:])
+        self.render_canvas()
+        return True
+
     def peek_action(self, action):
         """
         Action is a primitive struct of the form:
         (prim_name, [args])
         """
+        if action[0] == 'STOP':
+            return self.canvas.copy()
         orig_canvas = self.canvas.copy()
         self._add_primitive_struct(action[0], *action[1:])
         self.render_canvas()
@@ -24,20 +34,22 @@ class Canvas:
         self.canvas = orig_canvas
         return new_canvas
 
-    def get_reasonable_actions(self):
+    def get_reasonable_actions(self, spec):
         # TODO: not convex hull; h, w, r canned
-        actions = []
+        actions = [('STOP', [])]
+        if len(self.primitives) > self.MAX_PRIMITIVES:
+            return actions
         for prim_name in ['rectangle', 'circle']:
             for y in range(self.height):
                 for x in range(self.width):
-                    if self.canvas[y, x] == self.BLACK:
+                    if spec[y, x] == self.BLACK:
                         if prim_name == 'rectangle':
                             for h in range(8, 16):
-                                for y in range(8, 16):
-                                    actions.push(('rectangle', [x, y, h, w]))
+                                for w in range(8, 16):
+                                    actions.append(('rectangle', [x, y, h, w]))
                         if prim_name == 'circle':
                             for r in range(4, 8):
-                                actions.push(('circle', [x, y, r]))
+                                actions.append(('circle', [x, y, r]))
         return actions
 
     def intersection_over_union(self, spec):
@@ -158,9 +170,8 @@ class Canvas:
         return filename
 
     def make_random_drawings(self, n):
-        MAX_PRIMITIVES = 2
         for drawing_number in range(n):
-            num_primitives = randrange(1, MAX_PRIMITIVES)
+            num_primitives = randrange(1, self.MAX_PRIMITIVES)
             self.clear_primitives()
             self.clear_canvas()
             for primitive_number in range(num_primitives):
@@ -174,7 +185,6 @@ class Canvas:
 
     def make_easy_stacked_drawings(self, n):
         # TODO: maybe, have the first be spec, second x, third x'
-        num_primitives = 3
         num_canvases = 3
         for drawing_number in range(n):
             canvases = []
@@ -183,7 +193,7 @@ class Canvas:
             for c_idx in range(num_canvases):
                 self.clear_primitives()
                 self.clear_canvas()
-                for _ in range(num_primitives):
+                for _ in range(self.MAX_PRIMITIVES):
                     pt = (np.random.randint(0, 32), np.random.randint(0, 32))
                     h = np.random.randint(8, 16)
                     w = np.random.randint(8, 16)

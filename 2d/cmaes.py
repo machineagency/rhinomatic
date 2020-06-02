@@ -1,8 +1,10 @@
 import numpy as np
-from torch import save, load
+from torch import save, load, from_numpy, FloatTensor
 from scipy.linalg import sqrtm
 from sklearn import preprocessing
+import imageio
 import vae
+import canvas
 
 class Featurizer:
     def __init__(self, do_training=False):
@@ -25,13 +27,16 @@ class Featurizer:
         self.vae.eval()
 
     def featurize(self, img):
-        mu, logvar = self.vae.encode(img)
+        img_single_batch = from_numpy(img).reshape((1, 3, 32, 32))\
+                            .type(FloatTensor)
+        _, mu, logvar = self.vae(img_single_batch)
         # what do i do with variance
         return mu
 
 class CMAES:
     def __init__(self, train_featurizer=False):
         self.featurizer = Featurizer(train_featurizer)
+        self.canvas = canvas.Canvas(32, 32)
         self.MAX_ITER = 5
         self.FITNESS_THRESH = 10000
         self.NUM_EVAL_GAMES = 10
@@ -91,16 +96,36 @@ class CMAES:
 
     def play_cad_with_weightset(self, weightset):
         def q(state, action, spec):
-            next_state = canvas.do_action(action)
+            next_state = self.canvas.peek_action(action)
             q_stack = np.stack([state, next_state, spec])
             features = self.featurizer.featurize(q_stack)
-            return np.dot(weightset, features)
+            features = features.reshape((3 * self.dim, 1)).detach().numpy()
+            return np.dot(weightset, features)[0]
 
-        filepath = './test'
+        filepath = './test/drawings'
         test_set_size = 32
-        specs = [imageio.imread(f'{filepath}/{i}.png')\
+        images = [imageio.imread(f'{filepath}/{i}.png')\
                     for i in range(test_set_size)]
-        print(specs[0].shape)
+        images = [image.reshape(32, 32, 3) for image in images]
+        specs = [image[:, :, 0] for image in images]
+
+        total_ioc = 0
+        for spec_idx, spec in enumerate(specs):
+            print(f'On spec {spec_idx}')
+            self.canvas.clear_canvas()
+            self.canvas.clear_primitives()
+            while True:
+               orig_state = self.canvas.canvas.copy()
+               actions = self.canvas.get_reasonable_actions(spec)
+               print(f'\tConsidering {len(actions)} actions...')
+               q_vals = [q(orig_state, a, spec) for a in actions]
+               best_action = actions[np.argmax(q_vals)]
+               print(f'... did {best_action}.')
+               action_succeeded = self.canvas.do_action(best_action)
+               if not action_succeeded:
+                   break
+            total_ioc += self.canvas.intersection_over_union(spec)
+        return total_ioc / test_set_size
 
     def play_tetris_with_weightset(self, weightset):
         def v(state):
@@ -245,7 +270,8 @@ class CMAES:
         return cumulative_reward / num_games
 
     def test(self):
-        self.play_cad_with_weightset(None)
+        score = self.play_cad_with_weightset(np.ones(3 * self.dim))
+        print(score)
         # print('Sanity check fitness function')
         # print(self.test_fitness_fn(np.array([20, 20])))
         # print(self.test_fitness_fn(np.array([13, 12])))

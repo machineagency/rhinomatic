@@ -7,7 +7,7 @@ class Generator:
         self.cmaes = CMAES(train_featurizer)
 
 if __name__ == '__main__':
-    g = Generator(train_featurizer=True)
-    # g = Generator()
-    # g.cmaes.test()
+    # g = Generator(train_featurizer=True)
+    g = Generator()
+    g.cmaes.test()
 
