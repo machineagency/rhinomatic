@@ -201,7 +201,7 @@ class VAE(nn.Module):
               # for the first 128 batch of the epoch, show the first 8 input digits
               # with right below them the reconstructed output digits
               comparison = torch.cat([data[:n],
-                                      recon_batch.view(BATCH_SIZE, 1, 32, 32)[:n]])
+                                      recon_batch.view(BATCH_SIZE, 3, 32, 32)[:n]])
               save_image(comparison.data.cpu(),
                          'results/reconstruction_' + str(epoch) + '.png', nrow=n)
 
@@ -216,7 +216,7 @@ class VAE(nn.Module):
         train_dataset = datasets.ImageFolder(
                 root=data_path,
                 transform=transforms.Compose([
-                    transforms.Grayscale(),
+                    # transforms.Grayscale(),
                     transforms.ToTensor()
                 ])
         )
@@ -266,6 +266,6 @@ if __name__ == '__main__':
         # save out as an 8x8 matrix of MNIST digits
         # this will give you a visual idea of how well latent space can generate things
         # that look like digits
-        save_image(sample.data.view(64, 1, 32, 32),
+        save_image(sample.data.view(64, 3, 32, 32),
                    'results/sample_' + str(epoch) + '.png')
 

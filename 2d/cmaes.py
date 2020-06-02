@@ -1,17 +1,28 @@
 import numpy as np
+from torch import save, load
 from scipy.linalg import sqrtm
 from sklearn import preprocessing
 import vae
 
 class Featurizer:
-    def __init__(self):
+    def __init__(self, do_training=False):
+        self.state_dict_filepath = 'vae_state_dict.pt'
         self.vae = vae.VAE()
-        self.EPOCHS = 5
-        self.train_vae()
+        self.EPOCHS = 10
+        if do_training:
+            self.train_vae()
+        else:
+            self.load_vae_state_dict()
 
     def train_vae(self):
         for epoch in range(self.EPOCHS):
             self.vae.train_model(epoch)
+            self.vae.test(epoch)
+        save(self.vae.state_dict(), self.state_dict_filepath)
+
+    def load_vae_state_dict(self):
+        self.vae.load_state_dict(load(self.state_dict_filepath))
+        self.vae.eval()
 
     def featurize(self, img):
         mu, logvar = self.vae.encode(img)
@@ -19,8 +30,8 @@ class Featurizer:
         return mu
 
 class CMAES:
-    def __init__(self):
-        self.featurizer = Featurizer()
+    def __init__(self, train_featurizer=False):
+        self.featurizer = Featurizer(train_featurizer)
         self.MAX_ITER = 5
         self.FITNESS_THRESH = 10000
         self.NUM_EVAL_GAMES = 10
@@ -79,8 +90,17 @@ class CMAES:
         return -abs(actual_sum)
 
     def play_cad_with_weightset(self, weightset):
-        # TODO
-        pass
+        def q(state, action, spec):
+            next_state = canvas.do_action(action)
+            q_stack = np.stack([state, next_state, spec])
+            features = self.featurizer.featurize(q_stack)
+            return np.dot(weightset, features)
+
+        filepath = './test'
+        test_set_size = 32
+        specs = [imageio.imread(f'{filepath}/{i}.png')\
+                    for i in range(test_set_size)]
+        print(specs[0].shape)
 
     def play_tetris_with_weightset(self, weightset):
         def v(state):
@@ -225,7 +245,7 @@ class CMAES:
         return cumulative_reward / num_games
 
     def test(self):
-        pass
+        self.play_cad_with_weightset(None)
         # print('Sanity check fitness function')
         # print(self.test_fitness_fn(np.array([20, 20])))
         # print(self.test_fitness_fn(np.array([13, 12])))
