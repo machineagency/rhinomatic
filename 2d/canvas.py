@@ -135,6 +135,38 @@ class Canvas:
             self.save_canvas(f'data/drawings/{drawing_number}')
             self.write_spec(f'data/specs/{drawing_number}')
 
+    def make_easy_stacked_drawings(self, n):
+        # TODO: maybe, have the first be spec, second x, third x'
+        num_primitives = 3
+        num_canvases = 3
+        for drawing_number in range(n):
+            canvases = []
+            if drawing_number % 1000 == 0:
+                print(drawing_number)
+            for c_idx in range(num_canvases):
+                self.clear_primitives()
+                self.clear_canvas()
+                for _ in range(num_primitives):
+                    pt = (np.random.randint(0, 32), np.random.randint(0, 32))
+                    h = np.random.randint(8, 16)
+                    w = np.random.randint(8, 16)
+                    r = np.random.randint(4, 8)
+
+                    dice_roll = np.random.rand()
+                    if dice_roll < 0.33:
+                        c.add_rectangle(*pt, h, w)
+                    elif dice_roll < 0.67:
+                        c.add_circle(*pt, r)
+                    else:
+                        # Don't do draw anything here
+                        pass
+                self.render_canvas()
+                canvases.append(self.canvas.copy())
+            final_canvas = np.stack(canvases, 2)
+            self.canvas = final_canvas
+            self.save_canvas(f'data/drawings/{drawing_number}')
+            self.write_spec(f'data/specs/{drawing_number}')
+
     def make_easy_drawings(self, n):
         # anchor_points = [(20, 10), (10, 20)]
         for drawing_number in range(n):
@@ -167,5 +199,5 @@ class Canvas:
 if __name__ == '__main__':
     batch_size = 32
     c = Canvas(32, 32)
-    c.make_easy_drawings(1000 * batch_size)
+    c.make_easy_stacked_drawings(1000 * batch_size)
 
