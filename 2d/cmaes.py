@@ -120,7 +120,7 @@ class CMAES:
                print(f'\tConsidering {len(actions)} actions...')
                q_vals = [q(orig_state, a, spec) for a in actions]
                best_action = actions[np.argmax(q_vals)]
-               print(f'... did {best_action}.')
+               print(f'\t... did {best_action}.')
                action_succeeded = self.canvas.do_action(best_action)
                if not action_succeeded:
                    break

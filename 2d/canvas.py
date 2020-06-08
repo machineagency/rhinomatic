@@ -37,12 +37,13 @@ class Canvas:
     def get_reasonable_actions(self, spec):
         # TODO: not convex hull; h, w, r canned
         actions = [('STOP', [])]
-        if len(self.primitives) > self.MAX_PRIMITIVES:
+        if len(self.primitives) >= self.MAX_PRIMITIVES:
             return actions
+        remainder = spec - self.canvas
         for prim_name in ['rectangle', 'circle']:
             for y in range(self.height):
                 for x in range(self.width):
-                    if spec[y, x] == self.BLACK:
+                    if remainder[y, x] == self.BLACK:
                         if prim_name == 'rectangle':
                             for h in range(8, 16):
                                 for w in range(8, 16):
@@ -55,7 +56,7 @@ class Canvas:
     def intersection_over_union(self, spec):
         union = np.where(self.canvas + spec > 0, 1, 0)
         intersection = np.where(self.canvas + spec > 1, 1, 0)
-        return union / intersection
+        return np.count_nonzero(union) / np.count_nonzero(intersection)
 
     def add_line(self, x0, y0, x1, y1):
         return self._add_primitive_struct('line', [x0, y0, x1, y1])
