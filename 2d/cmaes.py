@@ -10,6 +10,7 @@ class Featurizer:
     def __init__(self, do_training=False):
         self.state_dict_filepath = 'vae_state_dict.pt'
         self.vae = vae.VAE()
+        self.bottleneck_dim = 20
         self.EPOCHS = 10
         if do_training:
             self.train_vae()
@@ -40,7 +41,7 @@ class CMAES:
         self.MAX_ITER = 5
         self.FITNESS_THRESH = 10000
         self.NUM_EVAL_GAMES = 10
-        self.dim = 20
+        self.dim = self.featurizer.bottleneck_dim * 3
         self.init_weightset = np.zeros(self.dim)
 
         # Calculate hyperparameters from dimension
@@ -75,7 +76,7 @@ class CMAES:
         function, run evaluation on each to determine fitness.
         NOTE: this must return _higher_ scores for fitter samples.
         """
-        assert x.shape == (self.dim * 3,) or x.shape == (self.dim * 3, 1)
+        assert x.shape == (self.dim,) or x.shape == (self.dim, 1)
         avg_score = 0
         avg_turns = 0
         for game_num in range(self.NUM_EVAL_GAMES):
@@ -99,7 +100,7 @@ class CMAES:
             next_state = self.env.peek_action(action)
             q_stack = np.stack([state, next_state, spec])
             features = self.featurizer.featurize(q_stack)
-            features = features.reshape((3 * self.dim, 1)).detach().numpy()
+            features = features.reshape((self.dim, 1)).detach().numpy()
             return np.dot(weightset, features)[0]
 
         filepath = './test/drawings'
@@ -114,6 +115,7 @@ class CMAES:
         for spec_idx, spec in enumerate(specs):
             # print(f'On spec {spec_idx}')
             self.env.reset()
+            self.env.set_spec(spec)
             while True:
                orig_state = self.env.canvas.copy()
                actions = self.env.get_actions()
@@ -121,12 +123,16 @@ class CMAES:
                q_vals = [q(orig_state, a, spec) for a in actions]
                best_action = actions[np.argmax(q_vals)]
                # print(f'\t... did {best_action}.')
-               action_succeeded = self.env.do_action(best_action)
+               reward, action_succeeded = self.env.do_action(best_action)
+               # NOTE: for now, give IoC after every action and take the
+               # average below.
+               total_ioc += reward
                if not action_succeeded:
                    break
             # print(f'\tTurns: {self.env.actions_done}')
             # print(f'\tIOC: {self.env.intersection_over_union(spec)}')
-            total_ioc += self.env.intersection_over_union(spec)
+            # total_ioc += self.env.intersection_over_union(spec)
+            total_ioc /= self.env.actions_done
             total_turns += self.env.actions_done
         avg_score = total_ioc / test_set_size
         avg_turns = total_turns / test_set_size
@@ -153,13 +159,13 @@ class CMAES:
     def train(self, starting_mean=None):
         # Things we will update
         if starting_mean is None:
-            mean = np.random.rand(self.dim * 3)
+            mean = np.random.rand(self.dim)
         else:
             mean = starting_mean
         sigma = 1
-        C = np.identity(self.dim * 3)
-        p_sig = np.zeros(self.dim * 3)
-        pc = np.zeros(self.dim * 3)
+        C = np.identity(self.dim)
+        p_sig = np.zeros(self.dim)
+        pc = np.zeros(self.dim)
 
         # Store stats
         running_means = []
@@ -167,8 +173,8 @@ class CMAES:
         running_turns = []
 
         # X contains LAM sample, each with SELF.DIM features
-        z = np.zeros((self.lam, self.dim * 3))
-        x = np.zeros((self.lam, self.dim * 3))
+        z = np.zeros((self.lam, self.dim))
+        x = np.zeros((self.lam, self.dim))
         f = np.zeros(self.lam)
         # turns is for scorekeeping only
         turns = np.zeros(self.lam)
@@ -177,7 +183,7 @@ class CMAES:
             # Draw population samples
             for i in range(self.lam):
                 print(f'\tDraw / eval sample {i} ...')
-                unnorm_z = self.sample_dist(np.zeros(self.dim * 3), C)
+                unnorm_z = self.sample_dist(np.zeros(self.dim), C)
                 z[i] = preprocessing.normalize(unnorm_z.reshape(1, -1))
                 x[i] = mean + sigma * z[i]
                 f[i], turns[i] = self.evaluate_single(x[i])
@@ -186,7 +192,7 @@ class CMAES:
             mean_old = mean.copy()
             mean = np.sum([self.w[i] * x[i] for i in range(self.mu)], axis=0)
             print(f'Best F this round: {np.max(f)}')
-            print(f'Best turns this round: {np.max(turns)}')
+            print(f'Best turns this round: {np.min(turns)}')
             print(f'New mean: {mean}')
             print(f'Sigma: {sigma}')
             running_means.append(mean)
@@ -226,7 +232,7 @@ class CMAES:
         return mean
 
     def test_play(self):
-        weightset = np.ones(self.dim * 3)
+        weightset = np.ones(self.dim)
         total_reward = self.play_cad_with_weightset(weightset)
         return total_reward
 
@@ -247,10 +253,11 @@ class CMAES:
         print(self.test_fitness_fn(np.array([20, 20])))
         print(self.test_fitness_fn(np.array([13, 12])))
         print('Let\'s play a round of 32')
-        print(self.test_play())
-        mean = self.train()
-        print('Training result')
-        print(mean)
+        avg_score, turns = self.test_play()
+        print(f'Score: {avg_score}, turns: {turns}')
+        # mean = self.train()
+        # print('Training result')
+        # print(mean)
         # final_result = self.run_final_weights()
         # print(f'Final average score: {final_result}')
 

@@ -12,23 +12,31 @@ class Environment:
         self.width = width
         self.primitives = []
         self.canvas = np.ones((height, width), dtype='uint8') * self.WHITE
+        self.spec = self.canvas.copy()
         self.actions_done = 0
 
     def reset(self):
         self.clear_canvas()
+        self.spec = self.canvas.copy()
         self.clear_primitives()
         self.actions_done = 0
 
+    def set_spec(self, spec):
+        self.spec = spec
+
     def do_action(self, action):
+        """
+        Applies action, returns (reward, successful).
+        """
         if action[0] == 'STOP':
-            return False
+            return 0, False
         if action[0] == 'MODIFY':
             self._modify_last_primitive_struct(action[1])
         else:
             self._add_primitive_struct(action[0], *action[1:])
         self.render_canvas()
         self.actions_done += 1
-        return True
+        return (self.intersection_over_union(self.spec), True)
 
     def peek_action(self, action):
         """
