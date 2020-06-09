@@ -85,7 +85,10 @@ class Environment:
         added = canvas_binarized + spec_binarized
         union = np.where(added > 0, 1, 0)
         intersection = np.where(added > 1, 1, 0)
-        return np.count_nonzero(intersection) / np.count_nonzero(union)
+        try:
+            return np.count_nonzero(intersection) / np.count_nonzero(union)
+        except ZeroDivisionError:
+            return 0
 
     def add_line(self, x0, y0, x1, y1):
         return self._add_primitive_struct('line', [x0, y0, x1, y1])

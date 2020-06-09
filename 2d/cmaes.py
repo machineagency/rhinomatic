@@ -69,17 +69,17 @@ class CMAES:
     def sample_dist(self, mean, cov_m):
         return np.random.multivariate_normal(mean, cov_m)
 
-    def evaluate_single(self, x, gameplay_seeds):
+    def evaluate_single(self, x):
         """
         Given a (1 x DIM) weightset for the tetris value
         function, run evaluation on each to determine fitness.
         NOTE: this must return _higher_ scores for fitter samples.
         """
-        assert x.shape == (self.dim,) or x.shape == (self.dim, 1)
+        assert x.shape == (self.dim * 3,) or x.shape == (self.dim * 3, 1)
         avg_score = 0
         avg_turns = 0
         for game_num in range(self.NUM_EVAL_GAMES):
-            score, turns = self.play_tetris_with_weightset(x)
+            score, turns = self.play_cad_with_weightset(x)
             np.random.seed()
             avg_score += score
             avg_turns += turns
@@ -110,8 +110,9 @@ class CMAES:
         specs = [image[:, :, 0] for image in images]
 
         total_ioc = 0
+        total_turns = 0
         for spec_idx, spec in enumerate(specs):
-            print(f'On spec {spec_idx}')
+            # print(f'On spec {spec_idx}')
             self.env.reset()
             while True:
                orig_state = self.env.canvas.copy()
@@ -123,10 +124,13 @@ class CMAES:
                action_succeeded = self.env.do_action(best_action)
                if not action_succeeded:
                    break
-            print(f'\tTurns: {self.env.actions_done}')
-            print(f'\tIOC: {self.env.intersection_over_union(spec)}')
+            # print(f'\tTurns: {self.env.actions_done}')
+            # print(f'\tIOC: {self.env.intersection_over_union(spec)}')
             total_ioc += self.env.intersection_over_union(spec)
-        return total_ioc / test_set_size
+            total_turns += self.env.actions_done
+        avg_score = total_ioc / test_set_size
+        avg_turns = total_turns / test_set_size
+        return (avg_score, avg_turns)
 
     def sort_by_fitness(self, x, f):
         """
@@ -149,13 +153,13 @@ class CMAES:
     def train(self, starting_mean=None):
         # Things we will update
         if starting_mean is None:
-            mean = np.random.rand(self.dim)
+            mean = np.random.rand(self.dim * 3)
         else:
             mean = starting_mean
         sigma = 1
-        C = np.identity(self.dim)
-        p_sig = np.zeros(self.dim)
-        pc = np.zeros(self.dim)
+        C = np.identity(self.dim * 3)
+        p_sig = np.zeros(self.dim * 3)
+        pc = np.zeros(self.dim * 3)
 
         # Store stats
         running_means = []
@@ -163,22 +167,20 @@ class CMAES:
         running_turns = []
 
         # X contains LAM sample, each with SELF.DIM features
-        z = np.zeros((self.lam, self.dim))
-        x = np.zeros((self.lam, self.dim))
+        z = np.zeros((self.lam, self.dim * 3))
+        x = np.zeros((self.lam, self.dim * 3))
         f = np.zeros(self.lam)
         # turns is for scorekeeping only
         turns = np.zeros(self.lam)
         for t in range(self.MAX_ITER):
             print(f'CMAES iter {t}')
             # Draw population samples
-            gameplay_seeds = np.random.randint(0, 100, self.NUM_EVAL_GAMES)
-            gameplay_seeds += self.true_random[t]
             for i in range(self.lam):
                 print(f'\tDraw / eval sample {i} ...')
-                unnorm_z = self.sample_dist(np.zeros(self.dim), C)
+                unnorm_z = self.sample_dist(np.zeros(self.dim * 3), C)
                 z[i] = preprocessing.normalize(unnorm_z.reshape(1, -1))
                 x[i] = mean + sigma * z[i]
-                f[i], turns[i] = self.evaluate_single(x[i], gameplay_seeds)
+                f[i], turns[i] = self.evaluate_single(x[i])
                 print(f'\t... scored {f[i]}, turns {turns[i]}')
             x = self.sort_by_fitness(x, f)
             mean_old = mean.copy()
@@ -224,18 +226,16 @@ class CMAES:
         return mean
 
     def test_play(self):
-        weightset = np.array([-1, 4, -1, -1, -1, 1, -1, -1])
-        total_reward = self.play_tetris_with_weightset(weightset)
+        weightset = np.ones(self.dim * 3)
+        total_reward = self.play_cad_with_weightset(weightset)
         return total_reward
 
     def run_final_weights(self):
         cumulative_reward = 0
         num_games = 20
-        final_result_seed = 801382
-        np.random.seed(final_result_seed)
         for game_num in range(num_games):
             print(f'Playing game # {game_num}...')
-            total_reward, turn = self.play_tetris_with_weightset(\
+            total_reward, turn = self.play_cad_with_weightset(\
                     self.final_weightset)
             cumulative_reward += total_reward
             print(f'... score: {total_reward}, turns lasted: {turn}')
@@ -243,16 +243,14 @@ class CMAES:
         return cumulative_reward / num_games
 
     def test(self):
-        score = self.play_cad_with_weightset(np.ones(3 * self.dim))
-        print(score)
-        # print('Sanity check fitness function')
-        # print(self.test_fitness_fn(np.array([20, 20])))
-        # print(self.test_fitness_fn(np.array([13, 12])))
-        # print('Let\'s play a game')
-        # print(self.test_play())
-        # mean = self.train(self.init_weightset)
-        # print('Training result')
-        # print(mean)
+        print('Sanity check fitness function')
+        print(self.test_fitness_fn(np.array([20, 20])))
+        print(self.test_fitness_fn(np.array([13, 12])))
+        print('Let\'s play a round of 32')
+        print(self.test_play())
+        mean = self.train()
+        print('Training result')
+        print(mean)
         # final_result = self.run_final_weights()
         # print(f'Final average score: {final_result}')
 
