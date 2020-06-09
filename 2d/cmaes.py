@@ -4,7 +4,7 @@ from scipy.linalg import sqrtm
 from sklearn import preprocessing
 import imageio
 import vae
-import canvas
+import environment
 
 class Featurizer:
     def __init__(self, do_training=False):
@@ -36,7 +36,7 @@ class Featurizer:
 class CMAES:
     def __init__(self, train_featurizer=False):
         self.featurizer = Featurizer(train_featurizer)
-        self.canvas = canvas.Canvas(32, 32)
+        self.env = environment.Environment(32, 32)
         self.MAX_ITER = 5
         self.FITNESS_THRESH = 10000
         self.NUM_EVAL_GAMES = 10
@@ -96,7 +96,7 @@ class CMAES:
 
     def play_cad_with_weightset(self, weightset):
         def q(state, action, spec):
-            next_state = self.canvas.peek_action(action)
+            next_state = self.env.peek_action(action)
             q_stack = np.stack([state, next_state, spec])
             features = self.featurizer.featurize(q_stack)
             features = features.reshape((3 * self.dim, 1)).detach().numpy()
@@ -112,19 +112,19 @@ class CMAES:
         total_ioc = 0
         for spec_idx, spec in enumerate(specs):
             print(f'On spec {spec_idx}')
-            self.canvas.clear_canvas()
-            self.canvas.clear_primitives()
+            self.env.clear_canvas()
+            self.env.clear_primitives()
             while True:
-               orig_state = self.canvas.canvas.copy()
-               actions = self.canvas.get_reasonable_actions(spec)
+               orig_state = self.env.canvas.copy()
+               actions = self.env.get_reasonable_actions(spec)
                print(f'\tConsidering {len(actions)} actions...')
                q_vals = [q(orig_state, a, spec) for a in actions]
                best_action = actions[np.argmax(q_vals)]
                print(f'\t... did {best_action}.')
-               action_succeeded = self.canvas.do_action(best_action)
+               action_succeeded = self.env.do_action(best_action)
                if not action_succeeded:
                    break
-            total_ioc += self.canvas.intersection_over_union(spec)
+            total_ioc += self.env.intersection_over_union(spec)
         return total_ioc / test_set_size
 
     def play_tetris_with_weightset(self, weightset):

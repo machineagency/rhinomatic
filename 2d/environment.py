@@ -2,7 +2,7 @@ import numpy as np
 import imageio
 from random import randrange
 
-class Canvas:
+class Environment:
     def __init__(self, height, width):
         self.MAX_PRIMITIVES = 3
         self.WHITE = 255
@@ -33,6 +33,22 @@ class Canvas:
         self._remove_last_primitive_struct()
         self.canvas = orig_canvas
         return new_canvas
+
+    def get_actions(self):
+        """
+        An action a 2-tuple is of the form:
+        (name, params)
+        where:
+            - NAME is 'MOD' if we are modifying the current primitive,
+              'STOP' to terminate the episode, and the name of a new primitve
+              otherwise
+            - PARAMS is a list of modifications to the currrent primitive's
+              arguments e.g. [0, 0, -1] to decrease the radius of a circle,
+              otherwise it is just the list of arguments for the new primitive.
+        The actions available depend on the current set of primitives in
+        self.primitives, as well as self.MAX_PRIMITIVES.
+        """
+        pass
 
     def get_reasonable_actions(self, spec):
         # TODO: not convex hull; h, w, r canned
