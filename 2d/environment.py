@@ -5,12 +5,19 @@ from random import randrange
 class Environment:
     def __init__(self, height, width):
         self.MAX_PRIMITIVES = 3
+        self.MAX_ACTIONS = 100
         self.WHITE = 255
         self.BLACK = 0
         self.height = height
         self.width = width
         self.primitives = []
         self.canvas = np.ones((height, width), dtype='uint8') * self.WHITE
+        self.actions_done = 0
+
+    def reset(self):
+        self.clear_canvas()
+        self.clear_primitives()
+        self.actions_done = 0
 
     def do_action(self, action):
         if action[0] == 'STOP':
@@ -20,6 +27,7 @@ class Environment:
         else:
             self._add_primitive_struct(action[0], *action[1:])
         self.render_canvas()
+        self.actions_done += 1
         return True
 
     def peek_action(self, action):
@@ -51,15 +59,18 @@ class Environment:
         self.primitives, as well as self.MAX_PRIMITIVES.
         """
         actions = [('STOP', [])]
+        if self.actions_done >= self.MAX_ACTIONS - 1:
+            return actions
         last_primitive = self._get_last_primitive_struct()
-        last_primitive_num_args = len(last_primitive[1])
-        for i in range(last_primitive_num_args):
-            mods_pos = [0] * last_primitive_num_args
-            mods_neg = [0] * last_primitive_num_args
-            mods_pos[i] = 1
-            mods_neg[i] = -1
-            actions.push(('MODIFY', mods_pos))
-            actions.push(('MODIFY', mods_neg))
+        if last_primitive:
+            last_primitive_num_args = len(last_primitive[1])
+            for i in range(last_primitive_num_args):
+                mods_pos = [0] * last_primitive_num_args
+                mods_neg = [0] * last_primitive_num_args
+                mods_pos[i] = 1
+                mods_neg[i] = -1
+                actions.append(('MODIFY', mods_pos))
+                actions.append(('MODIFY', mods_neg))
         if len(self.primitives) < self.MAX_PRIMITIVES:
             rect_args = [15, 15, 10, 10]
             circle_args = [15, 15, 6]
@@ -87,19 +98,22 @@ class Environment:
         return struct
 
     def _get_last_primitive_struct(self):
-        return self.primitives[len(self.primitives) - 1]
+        if len(self.primitives) > 0:
+            return self.primitives[len(self.primitives) - 1]
 
     def _modify_last_primitive_struct(self, arg_mods):
         last_primitive = self._get_last_primitive_struct()
-        last_args = last_primitive[1]
-        if len(arg_mods) != len(last_args):
-            raise ValueError()
-        for i, mod in enumerate(arg_mods):
-            last_args[i] += mod
-        return last_primitive
+        if last_primitive:
+            last_args = last_primitive[1]
+            if len(arg_mods) != len(last_args):
+                raise ValueError()
+            for i, mod in enumerate(arg_mods):
+                last_args[i] += mod
+            return last_primitive
 
     def _remove_last_primitive_struct(self):
-        self.primitives = self.primitives[:len(self.primitives) - 1]
+        if len(self.primitives) > 0:
+            self.primitives = self.primitives[:len(self.primitives) - 1]
 
     def clear_primitives(self):
         self.primitives = []

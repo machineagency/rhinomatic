@@ -112,18 +112,18 @@ class CMAES:
         total_ioc = 0
         for spec_idx, spec in enumerate(specs):
             print(f'On spec {spec_idx}')
-            self.env.clear_canvas()
-            self.env.clear_primitives()
+            self.env.reset()
             while True:
                orig_state = self.env.canvas.copy()
-               actions = self.env.get_reasonable_actions(spec)
-               print(f'\tConsidering {len(actions)} actions...')
+               actions = self.env.get_actions()
+               # print(f'\tConsidering {len(actions)} actions...')
                q_vals = [q(orig_state, a, spec) for a in actions]
                best_action = actions[np.argmax(q_vals)]
-               print(f'\t... did {best_action}.')
+               # print(f'\t... did {best_action}.')
                action_succeeded = self.env.do_action(best_action)
                if not action_succeeded:
                    break
+            print(f'IOC: {self.env.intersection_over_union(spec)}')
             total_ioc += self.env.intersection_over_union(spec)
         return total_ioc / test_set_size
 
