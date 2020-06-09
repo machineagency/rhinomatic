@@ -240,15 +240,17 @@ class Environment:
             self.write_spec(f'data/specs/{drawing_number}')
 
     def make_easy_stacked_drawings(self, n):
+        """
+        Two layers: first spec, second x (which is x' in the game)
+        """
         # TODO: maybe, have the first be spec, second x, third x'
-        num_canvases = 3
+        num_canvases = 2
         for drawing_number in range(n):
             canvases = []
             if drawing_number % 1000 == 0:
                 print(drawing_number)
             for c_idx in range(num_canvases):
-                self.clear_primitives()
-                self.clear_canvas()
+                self.reset()
                 for _ in range(self.MAX_PRIMITIVES):
                     pt = (np.random.randint(0, 32), np.random.randint(0, 32))
                     h = np.random.randint(8, 16)
@@ -257,14 +259,17 @@ class Environment:
 
                     dice_roll = np.random.rand()
                     if dice_roll < 0.33:
-                        c.add_rectangle(*pt, h, w)
+                        self.add_rectangle(*pt, h, w)
                     elif dice_roll < 0.67:
-                        c.add_circle(*pt, r)
+                        self.add_circle(*pt, r)
                     else:
                         # Don't do draw anything here
                         pass
                 self.render_canvas()
                 canvases.append(self.canvas.copy())
+            # Push blank canvas because we need 3 for RGB
+            self.reset()
+            canvases.append(self.canvas.copy())
             final_canvas = np.stack(canvases, 2)
             self.canvas = final_canvas
             self.save_canvas(f'data/drawings/{drawing_number}')
@@ -301,6 +306,6 @@ class Environment:
 
 if __name__ == '__main__':
     batch_size = 32
-    c = Canvas(32, 32)
-    c.make_easy_stacked_drawings(1000 * batch_size)
+    env = Environment(32, 32)
+    env.make_easy_stacked_drawings(1000 * batch_size)
 

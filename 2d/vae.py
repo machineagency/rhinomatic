@@ -19,7 +19,7 @@ EPOCHS = 10
 
 # connections through the autoencoder bottleneck
 # in the pytorch VAE example, this is 20
-ZDIMS = 20
+ZDIMS = 10
 
 torch.manual_seed(SEED)
 if CUDA:

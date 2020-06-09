@@ -10,7 +10,7 @@ class Featurizer:
     def __init__(self, do_training=False):
         self.state_dict_filepath = 'vae_state_dict.pt'
         self.vae = vae.VAE()
-        self.bottleneck_dim = 20
+        self.bottleneck_dim = 10
         self.EPOCHS = 10
         if do_training:
             self.train_vae()
@@ -27,8 +27,10 @@ class Featurizer:
         self.vae.load_state_dict(load(self.state_dict_filepath))
         self.vae.eval()
 
-    def featurize(self, img):
-        img_single_batch = from_numpy(img).reshape((1, 3, 32, 32))\
+    def featurize(self, spec, state):
+        empty_channel = np.ones((32, 32)) * 255
+        stack = np.stack([spec, state, empty_channel])
+        img_single_batch = from_numpy(stack).reshape((1, 3, 32, 32))\
                             .type(FloatTensor)
         _, mu, logvar = self.vae(img_single_batch)
         # what do i do with variance
@@ -38,9 +40,9 @@ class CMAES:
     def __init__(self, train_featurizer=False):
         self.featurizer = Featurizer(train_featurizer)
         self.env = environment.Environment(32, 32)
-        self.MAX_ITER = 5
+        self.MAX_ITER = 10
+        self.NUM_GAMES_PER_WEIGHTSET = 16
         self.FITNESS_THRESH = 10000
-        self.NUM_EVAL_GAMES = 10
         self.dim = self.featurizer.bottleneck_dim * 3
         self.init_weightset = np.zeros(self.dim)
 
@@ -70,21 +72,15 @@ class CMAES:
     def sample_dist(self, mean, cov_m):
         return np.random.multivariate_normal(mean, cov_m)
 
-    def evaluate_single(self, x):
+    def evaluate_single(self, x, specs):
         """
         Given a (1 x DIM) weightset for the tetris value
         function, run evaluation on each to determine fitness.
         NOTE: this must return _higher_ scores for fitter samples.
         """
         assert x.shape == (self.dim,) or x.shape == (self.dim, 1)
-        avg_score = 0
-        avg_turns = 0
-        for game_num in range(self.NUM_EVAL_GAMES):
-            score, turns = self.play_cad_with_weightset(x)
-            np.random.seed()
-            avg_score += score
-            avg_turns += turns
-        return (avg_score / self.NUM_EVAL_GAMES, avg_turns / self.NUM_EVAL_GAMES)
+        score, turns = self.play_cad_with_weightset(x, specs)
+        return (score, turns)
 
     def test_fitness_fn(self, x):
         """
@@ -95,27 +91,29 @@ class CMAES:
         actual_sum = np.sum(poly)
         return -abs(actual_sum)
 
-    def play_cad_with_weightset(self, weightset):
-        def q(state, action, spec):
-            next_state = self.env.peek_action(action)
-            q_stack = np.stack([state, next_state, spec])
-            features = self.featurizer.featurize(q_stack)
-            features = features.reshape((self.dim, 1)).detach().numpy()
-            return np.dot(weightset, features)[0]
-
-        filepath = './test/drawings'
-        test_set_size = 32
+    def get_random_specs(self):
+        # filepath = './test/drawings'
+        filepath = './data/drawings'
+        start_idx = np.random.randint(0, 32000 - self.NUM_GAMES_PER_WEIGHTSET)
         images = [imageio.imread(f'{filepath}/{i}.png')\
-                    for i in range(test_set_size)]
+                    for i in range(start_idx, start_idx + self.NUM_GAMES_PER_WEIGHTSET)]
         images = [image.reshape(32, 32, 3) for image in images]
         specs = [image[:, :, 0] for image in images]
+        return specs
+
+    def play_cad_with_weightset(self, weightset, specs):
+        def q(state, action, spec):
+            next_state = self.env.peek_action(action)
+            features = self.featurizer.featurize(spec, next_state)
+            features = features.reshape((self.dim, 1)).detach().numpy()
+            return np.dot(weightset, features)[0]
 
         total_ioc = 0
         total_turns = 0
         for spec_idx, spec in enumerate(specs):
-            # print(f'On spec {spec_idx}')
             self.env.reset()
             self.env.set_spec(spec)
+            # print(f'\t\tOn spec {spec_idx}')
             while True:
                orig_state = self.env.canvas.copy()
                actions = self.env.get_actions()
@@ -124,18 +122,16 @@ class CMAES:
                best_action = actions[np.argmax(q_vals)]
                # print(f'\t... did {best_action}.')
                reward, action_succeeded = self.env.do_action(best_action)
-               # NOTE: for now, give IoC after every action and take the
-               # average below.
-               total_ioc += reward
                if not action_succeeded:
                    break
             # print(f'\tTurns: {self.env.actions_done}')
             # print(f'\tIOC: {self.env.intersection_over_union(spec)}')
-            # total_ioc += self.env.intersection_over_union(spec)
-            total_ioc /= self.env.actions_done
+            total_ioc += self.env.intersection_over_union(spec)
             total_turns += self.env.actions_done
-        avg_score = total_ioc / test_set_size
-        avg_turns = total_turns / test_set_size
+        avg_score = total_ioc / self.NUM_GAMES_PER_WEIGHTSET
+        avg_turns = total_turns / self.NUM_GAMES_PER_WEIGHTSET
+        # NOTE: penalize score by turns taken
+        avg_score -= (avg_turns / self.env.MAX_ACTIONS) * 0.001
         return (avg_score, avg_turns)
 
     def sort_by_fitness(self, x, f):
@@ -180,13 +176,15 @@ class CMAES:
         turns = np.zeros(self.lam)
         for t in range(self.MAX_ITER):
             print(f'CMAES iter {t}')
+            specs_for_iter = self.get_random_specs()
             # Draw population samples
             for i in range(self.lam):
                 print(f'\tDraw / eval sample {i} ...')
-                unnorm_z = self.sample_dist(np.zeros(self.dim), C)
-                z[i] = preprocessing.normalize(unnorm_z.reshape(1, -1))
+                # unnorm_z = self.sample_dist(np.zeros(self.dim), C)
+                # z[i] = preprocessing.normalize(unnorm_z.reshape(1, -1))
+                z[i] = self.sample_dist(np.zeros(self.dim), C)
                 x[i] = mean + sigma * z[i]
-                f[i], turns[i] = self.evaluate_single(x[i])
+                f[i], turns[i] = self.evaluate_single(x[i], specs_for_iter)
                 print(f'\t... scored {f[i]}, turns {turns[i]}')
             x = self.sort_by_fitness(x, f)
             mean_old = mean.copy()
@@ -233,7 +231,8 @@ class CMAES:
 
     def test_play(self):
         weightset = np.ones(self.dim)
-        total_reward = self.play_cad_with_weightset(weightset)
+        specs = self.get_random_specs()
+        total_reward = self.play_cad_with_weightset(weightset, specs)
         return total_reward
 
     def run_final_weights(self):
@@ -255,8 +254,8 @@ class CMAES:
         print('Let\'s play a round of 32')
         avg_score, turns = self.test_play()
         print(f'Score: {avg_score}, turns: {turns}')
-        # mean = self.train()
-        # print('Training result')
+        mean = self.train()
+        print('Training result')
         # print(mean)
         # final_result = self.run_final_weights()
         # print(f'Final average score: {final_result}')
