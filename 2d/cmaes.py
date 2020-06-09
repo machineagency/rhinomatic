@@ -28,9 +28,8 @@ class Featurizer:
         self.vae.eval()
 
     def featurize(self, spec, state):
-        empty_channel = np.ones((32, 32)) * 255
-        stack = np.stack([spec, state, empty_channel])
-        img_single_batch = from_numpy(stack).reshape((1, 3, 32, 32))\
+        stack = np.stack([spec, state])
+        img_single_batch = from_numpy(stack).reshape((1, 2, 32, 32))\
                             .type(FloatTensor)
         _, mu, logvar = self.vae(img_single_batch)
         # what do i do with variance
@@ -40,10 +39,10 @@ class CMAES:
     def __init__(self, train_featurizer=False):
         self.featurizer = Featurizer(train_featurizer)
         self.env = environment.Environment(32, 32)
-        self.MAX_ITER = 10
-        self.NUM_GAMES_PER_WEIGHTSET = 16
+        self.MAX_ITER = 5
+        self.NUM_GAMES_PER_WEIGHTSET = 4
         self.FITNESS_THRESH = 10000
-        self.dim = self.featurizer.bottleneck_dim * 3
+        self.dim = self.featurizer.bottleneck_dim * 2
         self.init_weightset = np.zeros(self.dim)
 
         # Calculate hyperparameters from dimension
@@ -158,7 +157,7 @@ class CMAES:
             mean = np.random.rand(self.dim)
         else:
             mean = starting_mean
-        sigma = 1
+        sigma = 3
         C = np.identity(self.dim)
         p_sig = np.zeros(self.dim)
         pc = np.zeros(self.dim)

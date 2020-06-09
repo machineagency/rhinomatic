@@ -1,6 +1,6 @@
 # example from https://github.com/pytorch/examples/blob/master/vae/main.py
 # commented and type annotated by Charl Botha <cpbotha@vxlabs.com>
-
+import numpy as np
 import os
 import torch
 import torch.utils.data
@@ -201,7 +201,7 @@ class VAE(nn.Module):
               # for the first 128 batch of the epoch, show the first 8 input digits
               # with right below them the reconstructed output digits
               comparison = torch.cat([data[:n],
-                                      recon_batch.view(BATCH_SIZE, 3, 32, 32)[:n]])
+                                      recon_batch.view(BATCH_SIZE, 2, 32, 32)[:n]])
               save_image(comparison.data.cpu(),
                          'results/reconstruction_' + str(epoch) + '.png', nrow=n)
 
@@ -209,6 +209,10 @@ class VAE(nn.Module):
         print('====> Test set loss: {:.4f}'.format(test_loss))
 
     def load_dataset(self, is_test=False):
+        def rgb_to_two_channel(img):
+            img_np = np.array(img)
+            return img_np[:,:,0:2]
+
         if is_test:
             data_path = './test'
         else:
@@ -217,6 +221,7 @@ class VAE(nn.Module):
                 root=data_path,
                 transform=transforms.Compose([
                     # transforms.Grayscale(),
+                    transforms.Lambda(rgb_to_two_channel),
                     transforms.ToTensor()
                 ])
         )
