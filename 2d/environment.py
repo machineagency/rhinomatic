@@ -79,9 +79,13 @@ class Environment:
         return actions
 
     def intersection_over_union(self, spec):
-        union = np.where(self.canvas + spec > 0, 1, 0)
-        intersection = np.where(self.canvas + spec > 1, 1, 0)
-        return np.count_nonzero(union) / np.count_nonzero(intersection)
+        self.render_canvas()
+        canvas_binarized = np.where(self.canvas == self.BLACK, 1, 0)
+        spec_binarized = np.where(spec == self.BLACK, 1, 0)
+        added = canvas_binarized + spec_binarized
+        union = np.where(added > 0, 1, 0)
+        intersection = np.where(added > 1, 1, 0)
+        return np.count_nonzero(intersection) / np.count_nonzero(union)
 
     def add_line(self, x0, y0, x1, y1):
         return self._add_primitive_struct('line', [x0, y0, x1, y1])
