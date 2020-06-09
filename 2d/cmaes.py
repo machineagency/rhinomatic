@@ -123,37 +123,10 @@ class CMAES:
                action_succeeded = self.env.do_action(best_action)
                if not action_succeeded:
                    break
-            print(f'IOC: {self.env.intersection_over_union(spec)}')
+            print(f'\tTurns: {self.env.actions_done}')
+            print(f'\tIOC: {self.env.intersection_over_union(spec)}')
             total_ioc += self.env.intersection_over_union(spec)
         return total_ioc / test_set_size
-
-    def play_tetris_with_weightset(self, weightset):
-        def v(state):
-            featurizer = Featurizer()
-            features = featurizer.featurize(state)
-            return np.dot(weightset, features)
-
-        env = tetris.TetrisEnv()
-        env.reset()
-        total_reward = 0
-        while True:
-            # Preview next states
-            orig_state = env.state.copy()
-            actions = env.get_actions()
-            peek_next_states = []
-            for action in actions:
-                peek_next_state, _, _, _ = env.step(action)
-                peek_next_states.append(peek_next_state)
-                env.set_state(orig_state)
-
-            # Find best action and do for real
-            values = [v(s) for s in peek_next_states]
-            best_action = actions[np.argmax(values)]
-            next_state, reward, done, _ = env.step(best_action)
-            total_reward += reward
-            if done:
-                break
-        return (total_reward, next_state.turn)
 
     def sort_by_fitness(self, x, f):
         """
