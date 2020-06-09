@@ -15,22 +15,24 @@ class Environment:
     def do_action(self, action):
         if action[0] == 'STOP':
             return False
-        self._add_primitive_struct(action[0], *action[1:])
+        if action[0] == 'MODIFY':
+            self._modify_last_primitive_struct(action[1])
+        else:
+            self._add_primitive_struct(action[0], *action[1:])
         self.render_canvas()
         return True
 
     def peek_action(self, action):
         """
         Action is a primitive struct of the form:
-        (prim_name, [args])
+        (prim_name, [args_or_mods]),
+        where PRIM_NAME can also be 'STOP' or 'MODIFY'.
         """
-        if action[0] == 'STOP':
-            return self.canvas.copy()
+        orig_primitives = self.primitives[::]
         orig_canvas = self.canvas.copy()
-        self._add_primitive_struct(action[0], *action[1:])
-        self.render_canvas()
+        success = self.do_action(action)
         new_canvas = self.canvas.copy()
-        self._remove_last_primitive_struct()
+        self.primitives = orig_primitives
         self.canvas = orig_canvas
         return new_canvas
 
@@ -48,25 +50,21 @@ class Environment:
         The actions available depend on the current set of primitives in
         self.primitives, as well as self.MAX_PRIMITIVES.
         """
-        pass
-
-    def get_reasonable_actions(self, spec):
-        # TODO: not convex hull; h, w, r canned
         actions = [('STOP', [])]
-        if len(self.primitives) >= self.MAX_PRIMITIVES:
-            return actions
-        remainder = spec - self.canvas
-        for prim_name in ['rectangle', 'circle']:
-            for y in range(self.height):
-                for x in range(self.width):
-                    if remainder[y, x] == self.BLACK:
-                        if prim_name == 'rectangle':
-                            for h in range(8, 16):
-                                for w in range(8, 16):
-                                    actions.append(('rectangle', [x, y, h, w]))
-                        if prim_name == 'circle':
-                            for r in range(4, 8):
-                                actions.append(('circle', [x, y, r]))
+        last_primitive = self._get_last_primitive_struct()
+        last_primitive_num_args = len(last_primitive[1])
+        for i in range(last_primitive_num_args):
+            mods_pos = [0] * last_primitive_num_args
+            mods_neg = [0] * last_primitive_num_args
+            mods_pos[i] = 1
+            mods_neg[i] = -1
+            actions.push(('MODIFY', mods_pos))
+            actions.push(('MODIFY', mods_neg))
+        if len(self.primitives) < self.MAX_PRIMITIVES:
+            rect_args = [15, 15, 10, 10]
+            circle_args = [15, 15, 6]
+            actions.append(('rectangle', rect_args))
+            actions.append(('circle', circle_args))
         return actions
 
     def intersection_over_union(self, spec):
@@ -87,6 +85,18 @@ class Environment:
         struct = (prim_name, args)
         self.primitives.append(struct)
         return struct
+
+    def _get_last_primitive_struct(self):
+        return self.primitives[len(self.primitives) - 1]
+
+    def _modify_last_primitive_struct(self, arg_mods):
+        last_primitive = self._get_last_primitive_struct()
+        last_args = last_primitive[1]
+        if len(arg_mods) != len(last_args):
+            raise ValueError()
+        for i, mod in enumerate(arg_mods):
+            last_args[i] += mod
+        return last_primitive
 
     def _remove_last_primitive_struct(self):
         self.primitives = self.primitives[:len(self.primitives) - 1]
