@@ -11,7 +11,7 @@ class Featurizer:
         self.state_dict_filepath = 'vae_state_dict.pt'
         self.vae = vae.VAE()
         self.bottleneck_dim = 10
-        self.EPOCHS = 10
+        self.EPOCHS = 5
         if do_training:
             self.train_vae()
         else:
@@ -39,7 +39,7 @@ class CMAES:
     def __init__(self, train_featurizer=False):
         self.featurizer = Featurizer(train_featurizer)
         self.env = environment.Environment(32, 32)
-        self.MAX_ITER = 5
+        self.MAX_ITER = 25
         self.NUM_GAMES_PER_WEIGHTSET = 4
         self.FITNESS_THRESH = 10000
         self.dim = self.featurizer.bottleneck_dim * 2
