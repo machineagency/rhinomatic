@@ -1,5 +1,5 @@
 import copy, random
-from envs import tetris
+from environment import Environment
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 class QNet(nn.Module):
-    def __init__(self, input_num_channels):
+    def __init__(self, input_num_channels, grid_size):
         super(QNet, self).__init__()
         self.conv1 = nn.Conv2d(input_num_channels, 16, 4,
                                stride=2,
@@ -15,11 +15,12 @@ class QNet(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, 4,
                                stride=2,
                                padding=2)
-        self.fc1 = nn.Linear(768, 64)
+        self.fc1 = nn.Linear(32 * 9 * 9, 64)
         self.fc2 = nn.Linear(64, 1)
 
         self.criterion = nn.MSELoss()
         self.optimizer = optim.SGD(self.parameters(), lr=0.01)
+        self.GRID_SIZE = grid_size
 
     def forward(self, x):
         x = self.conv1(x)
@@ -33,7 +34,7 @@ class QNet(nn.Module):
         x = F.relu(x)
         return x
 
-    def update(self, next_states, actions, ys):
+    def update(self, spec, next_states, actions, ys):
         """
         Takes a list of tetris states and the actions taken at that time, and
         YS which are state-action values calculated from the offline network.
@@ -47,9 +48,10 @@ class QNet(nn.Module):
         #     temp_env.set_state(state)
         #     next_state, reward, done, _ = temp_env.step(action)
         #     next_states.append(next_state)
-        next_state_tensors = [self.calc_field_tensor(s) for s in next_states]
-        next_state_stack = torch.stack(next_state_tensors, 0)
-        q_preds_batch = self.predict_stack(next_state_stack)
+        next_state_tensors = [self.calc_spec_state_tensor(spec, s)\
+                                for s in next_states]
+        next_state_batch = torch.stack(next_state_tensors, 0)
+        q_preds_batch = self.predict_stack(next_state_batch)
         y_batch = torch.Tensor(ys).reshape((32, 1))
 
         self.optimizer.zero_grad()
@@ -74,32 +76,33 @@ class QNet(nn.Module):
         """
         return self.forward(x_stack)
 
-    def predict_single(self, env):
+    def predict_single(self, spec, state):
+        env = Environment(self.GRID_SIZE, self.GRID_SIZE)
+        env.set_spec(spec)
         actions = env.get_actions()
+        print(actions)
         new_states = []
         for action in actions:
             new_state = env.peek_action(action)
             new_states.append(new_state)
-        new_state_tensors = [self.calc_spec_state_tensor(s) for s in new_states]
+        new_state_tensors = [self.calc_spec_state_tensor(spec, s) for s in new_states]
         new_state_stack = torch.stack(new_state_tensors, 0)
         q_preds = self.forward(new_state_stack)
         return (q_preds, actions)
 
-    def predict_single_max_a(self, tetris_state):
-        q_preds, actions = self.predict_single(tetris_state)
+    def predict_single_max_a(self, spec, state):
+        q_preds, actions = self.predict_single(spec, state)
         return q_preds.max().item()
 
-    def predict_single_argmax_a(self, tetris_state):
-        q_preds, actions = self.predict_single(tetris_state)
+    def predict_single_argmax_a(self, spec, state):
+        q_preds, actions = self.predict_single(spec, state)
         max_action_idx = q_preds.argmax()
         return actions[max_action_idx]
 
     def calc_spec_state_tensor(self, spec, state):
-        pass
-
-    def calc_field_tensor(self, tetris_state):
-        field = tetris_state.field
-        t = torch.from_numpy(field).reshape((1, 21, 10)).type(torch.FloatTensor)
+        stack = np.stack([spec, state], 2)
+        t = torch.from_numpy(stack).reshape((2, self.GRID_SIZE,\
+                self.GRID_SIZE)).type(torch.FloatTensor)
         return t
 
     def flatten_volume_to_vector(self, x):
@@ -120,8 +123,9 @@ class Buffer:
             self.lst.append(self.gen_blank_exp())
 
     def gen_blank_exp(self):
-        return (torch.zeros((1, 21, 10)).type(torch.FloatTensor), 0, 0,\
-                torch.zeros((1, 21, 10)).type(torch.FloatTensor), False)
+        raise Exception()
+        return (torch.zeros((1, 32, 32)).type(torch.FloatTensor), 0, 0,\
+                torch.zeros((1, 32, 32)).type(torch.FloatTensor), False)
 
     def push(self, obj):
         """
@@ -165,8 +169,10 @@ class Buffer:
 
 class Player:
     def __init__(self):
+        self.GRID_SIZE = 32
+        self.NUM_CHANNELS = 2
         self.NUM_EPISODES = 1000
-        self.REPLAY_CAPACITY = 1000000
+        self.REPLAY_CAPACITY = 1000
         self.MINIBATCH_SIZE = 32
         self.HISTORY_DEPTH = 1
         self.OFFLINE_UPDATE_FREQ = 100
@@ -180,34 +186,34 @@ class Player:
         self.sample_weights = Buffer(self.REPLAY_CAPACITY, init_blank=False)
         self.losses = []
 
+        self.qnet_offline = QNet(self.NUM_CHANNELS, self.GRID_SIZE)
+        self.qnet_online = QNet(self.NUM_CHANNELS, self.GRID_SIZE)
+
+        self.env = Environment(self.GRID_SIZE, self.GRID_SIZE)
+        self.env.reset()
+
         self.baseline_trajectory = self.calc_baseline_trajectory()
         self.avg_qs = []
 
-        self.qnet_offline = QNet(self.HISTORY_DEPTH)
-        self.qnet_online = QNet(self.HISTORY_DEPTH)
-
-        self.env = tetris.TetrisEnv()
-        self.env.reset()
-
     def calc_baseline_trajectory(self):
-        temp_env = tetris.TetrisEnv()
-        temp_env.reset()
+        self.env.load_spec_with_index(0)
         x_lst = []
 
         while True:
-            actions = temp_env.get_actions()
+            actions = self.env.get_actions()
             action = actions[np.random.randint(len(actions))]
-            state, reward, done, _ = temp_env.step(action)
+            state, reward, success = self.env.do_action(action)
             x_lst.append(state)
-            if done:
+            if not success:
                 break
 
+        self.env.reset()
         return x_lst
 
     def calc_average_q(self):
         cumulative_q = 0
         for x in self.baseline_trajectory:
-            max_q = self.qnet_offline.predict_single_max_a(x)
+            max_q = self.qnet_offline.predict_single_max_a(self.env.spec, x)
             cumulative_q += max_q
         return cumulative_q / len(self.baseline_trajectory)
 
@@ -265,7 +271,8 @@ class Player:
         if np.random.random() < epsilon:
             # TODO: 3-way balance between heuristic, random, Q
             # return random_a_idx
-            return self.get_action_with_fitness(tetris_state)
+            # return self.get_action_with_fitness(tetris_state)
+            return random_action
         argmax_a_idx = self.qnet_offline.\
                         predict_single_argmax_a(tetris_state)
         return argmax_a_idx
@@ -281,14 +288,14 @@ class Player:
         a_lst = []
         y_lst = []
         for exp in experiences:
-            x, a, r, xp, terminal = exp
+            spec, x, a, r, xp, terminal = exp
             xp_lst.append(xp)
             a_lst.append(a)
             if terminal:
                 y_lst.append(r)
             else:
                 max_a_q_pred = self.qnet_offline.\
-                        predict_single_max_a(xp)
+                        predict_single_max_a(spec, xp)
                 y_lst.append(r + self.GAMMA * max_a_q_pred)
         return (xp_lst, a_lst, y_lst)
 
@@ -308,11 +315,11 @@ class Player:
         # Execute and observe
         x, reward, success = self.env.do_action(action)
 
-        # Store experience (x, a_idx, r, x', terminal)
+        # Store experience (s*, x, a_idx, r, x', terminal)
         # This is messy since we need to process histories first
         # We only store h in the buffer, x is only available in this loop
         terminal = not success
-        exp = (x_old, action, reward, x, terminal)
+        exp = (self.env.spec.copy(), x_old, action, reward, x, terminal)
         self.replay_buffer.push(exp)
         # TODO: prioritized sweeping for real
         # weight = reward if reward > 0 else 0.01
@@ -321,6 +328,7 @@ class Player:
         # Sample minibatch, determine y with offline, update online
         if len(self.replay_buffer) >= self.MINIBATCH_SIZE:
             lst_xp, lst_a, lst_y = self.calc_replay_minibatch()
+            print(lst_y)
             self.qnet_online.update(lst_xp, lst_a, lst_y)
             self.update_epsilon()
         return reward
@@ -332,6 +340,7 @@ class Player:
         # try:
         for ep_num in range(self.NUM_EPISODES):
             self.env.reset()
+            self.env.load_spec_with_index(ep_num)
             cumulative_reward = 0
             while not self.env.completed:
                 turn_reward = self.do_turn()

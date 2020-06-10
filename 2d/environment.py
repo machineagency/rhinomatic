@@ -4,39 +4,54 @@ from random import randrange
 
 class Environment:
     def __init__(self, height, width):
-        self.MAX_PRIMITIVES = 3
-        self.MAX_ACTIONS = 100
+        self.MAX_PRIMITIVES = 1
+        self.MAX_ACTIONS = 60
         self.WHITE = 255
         self.BLACK = 0
         self.height = height
         self.width = width
         self.primitives = []
         self.canvas = np.ones((height, width), dtype='uint8') * self.WHITE
-        self.spec = self.canvas.copy()
+        # NOTE: spec is None unless explicitly set
+        self.spec = None
         self.actions_done = 0
+        self.completed = False
 
     def reset(self):
+        self.completed = False
         self.clear_canvas()
-        self.spec = self.canvas.copy()
+        self.spec = None
         self.clear_primitives()
         self.actions_done = 0
 
     def set_spec(self, spec):
         self.spec = spec
 
+    def load_spec_with_index(self, idx):
+        filepath = 'data/drawings'
+        image = imageio.imread(f'{filepath}/{idx}.png')
+        image = image.reshape(self.height, self.width, 3)
+        spec = image[:, :, 0]
+        self.set_spec(spec)
+        return spec
+
     def do_action(self, action):
         """
         Applies action, returns (reward, successful).
         """
+        if self.completed:
+            return (self.canvas.copy(), 0, False)
         if action[0] == 'STOP':
-            return 0, False
+            self.completed = True
+            return (self.canvas.copy(), self.intersection_over_union(self.spec),
+                    False)
         if action[0] == 'MODIFY':
             self._modify_last_primitive_struct(action[1])
         else:
             self._add_primitive_struct(action[0], *action[1:])
         self.render_canvas()
         self.actions_done += 1
-        return (self.intersection_over_union(self.spec), True)
+        return (self.canvas.copy(), -0.0001, True)
 
     def peek_action(self, action):
         """
@@ -82,7 +97,7 @@ class Environment:
         if len(self.primitives) < self.MAX_PRIMITIVES:
             rect_args = [15, 15, 10, 10]
             circle_args = [15, 15, 6]
-            actions.append(('rectangle', rect_args))
+            # actions.append(('rectangle', rect_args))
             actions.append(('circle', circle_args))
         return actions
 
@@ -257,14 +272,16 @@ class Environment:
                     w = np.random.randint(8, 16)
                     r = np.random.randint(4, 8)
 
-                    dice_roll = np.random.rand()
-                    if dice_roll < 0.33:
-                        self.add_rectangle(*pt, h, w)
-                    elif dice_roll < 0.67:
-                        self.add_circle(*pt, r)
-                    else:
-                        # Don't do draw anything here
-                        pass
+                    self.add_circle(*pt, r)
+
+                    # dice_roll = np.random.rand()
+                    # if dice_roll < 0.33:
+                    #     self.add_rectangle(*pt, h, w)
+                    # elif dice_roll < 0.67:
+                    #     self.add_circle(*pt, r)
+                    # else:
+                    #     # Don't do draw anything here
+                    #     pass
                 self.render_canvas()
                 canvases.append(self.canvas.copy())
             # Push blank canvas because we need 3 for RGB
