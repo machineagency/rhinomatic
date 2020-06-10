@@ -1,4 +1,4 @@
-import copy, random
+import random, copy
 from environment import Environment
 import numpy as np
 import torch
@@ -34,7 +34,7 @@ class QNet(nn.Module):
         x = F.relu(x)
         return x
 
-    def update(self, spec, next_states, actions, ys):
+    def update(self, next_states, actions, ys):
         """
         Takes a list of tetris states and the actions taken at that time, and
         YS which are state-action values calculated from the offline network.
@@ -48,7 +48,7 @@ class QNet(nn.Module):
         #     temp_env.set_state(state)
         #     next_state, reward, done, _ = temp_env.step(action)
         #     next_states.append(next_state)
-        next_state_tensors = [self.calc_spec_state_tensor(spec, s)\
+        next_state_tensors = [self.calc_spec_state_tensor(s)\
                                 for s in next_states]
         next_state_batch = torch.stack(next_state_tensors, 0)
         q_preds_batch = self.predict_stack(next_state_batch)
@@ -76,31 +76,33 @@ class QNet(nn.Module):
         """
         return self.forward(x_stack)
 
-    def predict_single(self, spec, state):
-        env = Environment(self.GRID_SIZE, self.GRID_SIZE)
-        env.set_spec(spec)
-        actions = env.get_actions()
-        print(actions)
+    def predict_single(self, state_env):
+        # TODO
+        actions = state_env.get_actions()
+        spec = state_env.spec
+        # print(actions)
         new_states = []
         for action in actions:
-            new_state = env.peek_action(action)
+            new_state = state_env.peek_action(action)
             new_states.append(new_state)
-        new_state_tensors = [self.calc_spec_state_tensor(spec, s) for s in new_states]
+        new_state_tensors = [self.calc_spec_state_tensor(s) for s in new_states]
         new_state_stack = torch.stack(new_state_tensors, 0)
         q_preds = self.forward(new_state_stack)
         return (q_preds, actions)
 
-    def predict_single_max_a(self, spec, state):
-        q_preds, actions = self.predict_single(spec, state)
+    def predict_single_max_a(self, state_env):
+        q_preds, actions = self.predict_single(state_env)
         return q_preds.max().item()
 
-    def predict_single_argmax_a(self, spec, state):
-        q_preds, actions = self.predict_single(spec, state)
+    def predict_single_argmax_a(self, state_env):
+        q_preds, actions = self.predict_single(state_env)
         max_action_idx = q_preds.argmax()
         return actions[max_action_idx]
 
-    def calc_spec_state_tensor(self, spec, state):
-        stack = np.stack([spec, state], 2)
+    def calc_spec_state_tensor(self, state):
+        spec = state.spec.copy()
+        canvas = state.canvas.copy()
+        stack = np.stack([spec, canvas], 2)
         t = torch.from_numpy(stack).reshape((2, self.GRID_SIZE,\
                 self.GRID_SIZE)).type(torch.FloatTensor)
         return t
@@ -213,7 +215,7 @@ class Player:
     def calc_average_q(self):
         cumulative_q = 0
         for x in self.baseline_trajectory:
-            max_q = self.qnet_offline.predict_single_max_a(self.env.spec, x)
+            max_q = self.qnet_offline.predict_single_max_a(x)
             cumulative_q += max_q
         return cumulative_q / len(self.baseline_trajectory)
 
@@ -261,12 +263,12 @@ class Player:
         best_action = actions[best_action_idx]
         return best_action
 
-    def get_action_from_policy(self, tetris_state, epsilon):
+    def get_action_from_policy(self, state_env, epsilon):
         """
         Select a random action with probability epsilon, otherwise
         do argmax_a Q(h(x), a).
         """
-        legal_actions = self.env.get_actions()
+        legal_actions = state_env.get_actions()
         random_action = legal_actions[np.random.randint(len(legal_actions))]
         if np.random.random() < epsilon:
             # TODO: 3-way balance between heuristic, random, Q
@@ -274,7 +276,7 @@ class Player:
             # return self.get_action_with_fitness(tetris_state)
             return random_action
         argmax_a_idx = self.qnet_offline.\
-                        predict_single_argmax_a(tetris_state)
+                        predict_single_argmax_a(state_env)
         return argmax_a_idx
 
     def calc_replay_minibatch(self):
@@ -288,14 +290,14 @@ class Player:
         a_lst = []
         y_lst = []
         for exp in experiences:
-            spec, x, a, r, xp, terminal = exp
+            x, a, r, xp, terminal = exp
             xp_lst.append(xp)
             a_lst.append(a)
             if terminal:
                 y_lst.append(r)
             else:
                 max_a_q_pred = self.qnet_offline.\
-                        predict_single_max_a(spec, xp)
+                        predict_single_max_a(xp)
                 y_lst.append(r + self.GAMMA * max_a_q_pred)
         return (xp_lst, a_lst, y_lst)
 
@@ -307,7 +309,7 @@ class Player:
         Inner loop of DQRL algorithm.
         """
         # Record and preprocess current state
-        x_old = self.env.canvas.copy()
+        x_old = self.env.copy()
 
         # Pick an action via policy
         action = self.get_action_from_policy(x_old, self.epsilon)
@@ -319,7 +321,7 @@ class Player:
         # This is messy since we need to process histories first
         # We only store h in the buffer, x is only available in this loop
         terminal = not success
-        exp = (self.env.spec.copy(), x_old, action, reward, x, terminal)
+        exp = (x_old, action, reward, x, terminal)
         self.replay_buffer.push(exp)
         # TODO: prioritized sweeping for real
         # weight = reward if reward > 0 else 0.01
@@ -328,7 +330,6 @@ class Player:
         # Sample minibatch, determine y with offline, update online
         if len(self.replay_buffer) >= self.MINIBATCH_SIZE:
             lst_xp, lst_a, lst_y = self.calc_replay_minibatch()
-            print(lst_y)
             self.qnet_online.update(lst_xp, lst_a, lst_y)
             self.update_epsilon()
         return reward
@@ -356,7 +357,7 @@ class Player:
                 avg_q = self.calc_average_q()
                 avg_qs.append(avg_q)
                 print(f'Episode {ep_num}, eps: {self.epsilon}')
-                print(f'\tCR: {cumulative_reward}, turns: {self.env.state.turn}, AvgQ: {avg_q}')
+                print(f'\tCR: {cumulative_reward}, turns: {self.env.actions_done}, AvgQ: {avg_q}')
         # except KeyboardInterrupt:
         #     print('Ending early.')
         # except Exception as e:

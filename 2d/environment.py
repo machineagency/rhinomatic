@@ -1,5 +1,6 @@
 import numpy as np
 import imageio
+from copy import copy
 from random import randrange
 
 class Environment:
@@ -27,6 +28,15 @@ class Environment:
     def set_spec(self, spec):
         self.spec = spec
 
+    def copy(self):
+        new_env = Environment(self.height, self.width)
+        new_env.set_spec(self.spec.copy())
+        new_env.canvas = self.canvas.copy()
+        new_env.primitives = self.primitives[::]
+        new_env.actions_done = self.actions_done
+        new_env.completed = self.completed
+        return new_env
+
     def load_spec_with_index(self, idx):
         filepath = 'data/drawings'
         image = imageio.imread(f'{filepath}/{idx}.png')
@@ -40,10 +50,10 @@ class Environment:
         Applies action, returns (reward, successful).
         """
         if self.completed:
-            return (self.canvas.copy(), 0, False)
+            return (self.copy(), 0, False)
         if action[0] == 'STOP':
             self.completed = True
-            return (self.canvas.copy(), self.intersection_over_union(self.spec),
+            return (self.copy(), self.intersection_over_union(self.spec),
                     False)
         if action[0] == 'MODIFY':
             self._modify_last_primitive_struct(action[1])
@@ -51,7 +61,7 @@ class Environment:
             self._add_primitive_struct(action[0], *action[1:])
         self.render_canvas()
         self.actions_done += 1
-        return (self.canvas.copy(), -0.0001, True)
+        return (self.copy(), -0.0001, True)
 
     def peek_action(self, action):
         """
@@ -59,13 +69,9 @@ class Environment:
         (prim_name, [args_or_mods]),
         where PRIM_NAME can also be 'STOP' or 'MODIFY'.
         """
-        orig_primitives = self.primitives[::]
-        orig_canvas = self.canvas.copy()
-        success = self.do_action(action)
-        new_canvas = self.canvas.copy()
-        self.primitives = orig_primitives
-        self.canvas = orig_canvas
-        return new_canvas
+        new_env = self.copy()
+        new_env.do_action(action)
+        return new_env
 
     def get_actions(self):
         """
