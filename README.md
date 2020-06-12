@@ -4,11 +4,11 @@ Generate a Rhino file that matches a target input mesh.
 
 Final project for CSE 542 - Reinforcement Learning.
 
-## Installation
+## Instructions
 
-1. `pip install rhino3dm`
-2. ???
-3. Profit
+1. Navigate to `2d`
+2. First generate training data by running `python environment.py`
+3. In `es_approach`, run `python generator.py`. In `dqn_approach`, run `player.py`.
 
 ## Background literature
 
