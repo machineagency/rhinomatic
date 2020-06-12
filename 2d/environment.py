@@ -6,7 +6,7 @@ from random import randrange
 class Environment:
     def __init__(self, height, width):
         self.MAX_PRIMITIVES = 1
-        self.MAX_ACTIONS = 60
+        self.MAX_ACTIONS = 30
         self.WHITE = 255
         self.BLACK = 0
         self.height = height
@@ -61,7 +61,7 @@ class Environment:
             self._add_primitive_struct(action[0], *action[1:])
         self.render_canvas()
         self.actions_done += 1
-        return (self.copy(), -0.0001, True)
+        return (self.copy(), self.intersection_over_union(self.spec) / 100, True)
 
     def peek_action(self, action):
         """
@@ -73,7 +73,7 @@ class Environment:
         new_env.do_action(action)
         return new_env
 
-    def get_actions(self):
+    def get_actions(self, no_stop=False):
         """
         An action a 2-tuple is of the form:
         (name, params)
@@ -87,9 +87,13 @@ class Environment:
         The actions available depend on the current set of primitives in
         self.primitives, as well as self.MAX_PRIMITIVES.
         """
-        actions = [('STOP', [])]
+        actions = []
         if self.actions_done >= self.MAX_ACTIONS - 1:
+            # NOTE: return stop regardless if we cannot act anymore
+            actions.append(('STOP', []))
             return actions
+        if not no_stop:
+            actions.append(('STOP', []))
         last_primitive = self._get_last_primitive_struct()
         if last_primitive:
             last_primitive_num_args = len(last_primitive[1])

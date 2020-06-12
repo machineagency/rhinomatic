@@ -28,10 +28,12 @@ class QNet(nn.Module):
         x = self.conv2(x)
         x = F.relu(x)
         x = self.flatten_volume_to_vector(x)
+        # print(f'\t\tFWD: {x}')
         x = self.fc1(x)
         x = F.relu(x)
         x = self.fc2(x)
         x = F.relu(x)
+        # print(f'\t\tafter: {x}')
         return x
 
     def update(self, next_states, actions, ys):
@@ -52,7 +54,8 @@ class QNet(nn.Module):
                                 for s in next_states]
         next_state_batch = torch.stack(next_state_tensors, 0)
         q_preds_batch = self.predict_stack(next_state_batch)
-        y_batch = torch.Tensor(ys).reshape((32, 1))
+        y_batch = torch.Tensor(ys).reshape((4, 1))
+        print(q_preds_batch)
 
         self.optimizer.zero_grad()
         loss = self.criterion(q_preds_batch, y_batch)
@@ -100,8 +103,8 @@ class QNet(nn.Module):
         return actions[max_action_idx]
 
     def calc_spec_state_tensor(self, state):
-        spec = state.spec.copy()
-        canvas = state.canvas.copy()
+        spec = np.where(state.spec > 0, 1, 0)
+        canvas = np.where(state.canvas > 0, 1, 0)
         stack = np.stack([spec, canvas], 2)
         t = torch.from_numpy(stack).reshape((2, self.GRID_SIZE,\
                 self.GRID_SIZE)).type(torch.FloatTensor)
@@ -173,17 +176,19 @@ class Player:
     def __init__(self):
         self.GRID_SIZE = 32
         self.NUM_CHANNELS = 2
-        self.NUM_EPISODES = 1000
+        self.NUM_EPISODES = 100
+        self.NUM_FRAMES = 10000
         self.REPLAY_CAPACITY = 1000
-        self.MINIBATCH_SIZE = 32
+        self.MINIBATCH_SIZE = 4
         self.HISTORY_DEPTH = 1
         self.OFFLINE_UPDATE_FREQ = 100
-        self.GAMMA = 0.99
+        self.GAMMA = 0.9
         self.DEFAULT_ACTION_IDX = 4
         self.EPS_REDUCTION = 0.0001
         self.MIN_EPS = 0.1
         self.epsilon = 1.0
         self.frames_since_update = 0
+        self.total_frames = 0
         self.replay_buffer = Buffer(self.REPLAY_CAPACITY, init_blank=False)
         self.sample_weights = Buffer(self.REPLAY_CAPACITY, init_blank=False)
         self.losses = []
@@ -202,7 +207,7 @@ class Player:
         x_lst = []
 
         while True:
-            actions = self.env.get_actions()
+            actions = self.env.get_actions(no_stop=True)
             action = actions[np.random.randint(len(actions))]
             state, reward, success = self.env.do_action(action)
             x_lst.append(state)
@@ -233,42 +238,28 @@ class Player:
         num_slots = 9
         return [a_idx // num_slots, a_idx % num_slots]
 
-    def get_action_with_fitness(self, tetris_state):
+    def get_action_with_fitness(self, state_env):
         """
-        Pick an action based on the heuristic function in the gold
-        standard paper.
+        Pick a naive action to move primitive closer to a centroid.
         """
-        def count_holes(field, tops):
-            # TODO:
-            pass
-        temp_env = tetris.TetrisEnv()
-        temp_env.set_state(tetris_state)
-        actions = temp_env.get_actions()
-        action_scores = []
-        for action in actions:
-            orient, slot = action
-            # do action
-            next_state, reward, done, _ = temp_env.step(action)
-            # measure features
-            heights = [next_state.top[col] for col in range(10)]
-            heights_offset = heights[1:] + heights[len(heights) - 1]
-            agg_height = sum(heights)
-            bumpiness = sum([abs(a - b) for a, b in zip(heights, heights_offset)])
-            lines_cleared = temp_env.cleared_current_turn
-            score = -0.51 * agg_height + 0.76 * lines_cleared + -0.18 * bumpiness
-            action_scores.append(score)
-            temp_env.set_state(tetris_state)
-
-        best_action_idx = np.argmax(action_scores)
-        best_action = actions[best_action_idx]
-        return best_action
+        spec = state_env.spec
+        canvas = state_env.canvas
+        # FIXME: worst abstraction layer violation ever
+        curr_center = state_env._get_last_primitive_struct()[1][0:1]
+        up_spec = spec[:curr_center[1], :].count_nonzero()
+        down_spec = spec[curr_center[1]:, :].count_nonzero()
+        left_spec = spec[:, curr_center[0]:].count_nonzero()
+        right_spec = spec[:, :curr_center[0]].count_nonzero()
 
     def get_action_from_policy(self, state_env, epsilon):
         """
         Select a random action with probability epsilon, otherwise
         do argmax_a Q(h(x), a).
         """
-        legal_actions = state_env.get_actions()
+        if state_env.actions_done < state_env.MAX_ACTIONS / 2:
+            legal_actions = state_env.get_actions(no_stop=True)
+        else:
+            legal_actions = state_env.get_actions(no_stop=False)
         random_action = legal_actions[np.random.randint(len(legal_actions))]
         if np.random.random() < epsilon:
             # TODO: 3-way balance between heuristic, random, Q
@@ -317,7 +308,7 @@ class Player:
         # Execute and observe
         x, reward, success = self.env.do_action(action)
 
-        # Store experience (s*, x, a_idx, r, x', terminal)
+        # Store experience (x, a_idx, r, x', terminal)
         # This is messy since we need to process histories first
         # We only store h in the buffer, x is only available in this loop
         terminal = not success
@@ -335,11 +326,13 @@ class Player:
         return reward
 
     def train(self):
+        print('Begin training.')
         game_lengths = []
         crs = []
         avg_qs = []
         # try:
-        for ep_num in range(self.NUM_EPISODES):
+        ep_num = 0
+        while self.total_frames <= self.NUM_FRAMES:
             self.env.reset()
             self.env.load_spec_with_index(ep_num)
             cumulative_reward = 0
@@ -347,17 +340,19 @@ class Player:
                 turn_reward = self.do_turn()
                 cumulative_reward += turn_reward
             self.frames_since_update += self.env.actions_done
+            self.total_frames += self.env.actions_done
             if self.frames_since_update > self.OFFLINE_UPDATE_FREQ:
                 self.update_offline_network()
                 self.frames_since_update -= self.OFFLINE_UPDATE_FREQ
                 print('\tUpdated network.')
-            if ep_num > 0 and ep_num % 10 == 0:
+            if ep_num > 0 and ep_num % 1 == 0:
                 game_lengths.append(self.env.actions_done)
                 crs.append(cumulative_reward)
                 avg_q = self.calc_average_q()
                 avg_qs.append(avg_q)
-                print(f'Episode {ep_num}, eps: {self.epsilon}')
+                print(f'Episode {ep_num}, frames: {self.total_frames}, eps: {self.epsilon}')
                 print(f'\tCR: {cumulative_reward}, turns: {self.env.actions_done}, AvgQ: {avg_q}')
+            ep_num += 1
         # except KeyboardInterrupt:
         #     print('Ending early.')
         # except Exception as e:
